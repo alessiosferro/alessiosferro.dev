@@ -28,6 +28,10 @@ wss.on('connection', function connection(ws) {
         ws.send('Welcome to my server!');
     }
 
+    db.run(`INSERT INTO visitors (count, time)
+        VALUES (${numClients}, datetime('now'))
+    `);
+
     ws.on('close', function close() {
        console.log(`A client has disconnected.`);
        wss.broadcast(`A client has disconnected.`);
@@ -40,4 +44,39 @@ wss.broadcast = function(data) {
     });
 }
 
+/* Begin database */
+const sqlite = require('sqlite3');
+const db = new sqlite.Database(':memory:');
 
+db.serialize(() => {
+    db.run(`
+        CREATE TABLE visitors (
+            count INTEGER,
+            time TEXT
+        )
+    `);
+});
+
+function getCounts() {
+    db.each("SELECT * FROM visitors", (err, row) => {
+        console.log(row);
+    });
+}
+
+function shutdownDB() {
+    getCounts();
+    db.close();
+}
+
+process.on('SIGINT', () => {
+    wss.clients.forEach(function each(client) {
+        client.close();
+    });
+
+    shutdownDB();
+    server.closeAllConnections();
+    server.close(() => {
+        console.log("Server closed.")
+        process.exit(0);
+    });
+});
